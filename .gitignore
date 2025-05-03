@@ -1,0 +1,7 @@
+credentials.json
+token.json
+OAI_CONFIG_LIST
+__pycache__
+.cache
+.history
+venv
