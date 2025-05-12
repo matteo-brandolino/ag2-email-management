@@ -69,3 +69,17 @@ def sort_and_trim_emails(grouped_emails):
     print(f"Sorted_grouped_emails: {sorted_grouped_emails}")
 
     return sorted_grouped_emails
+
+
+def get_context(unread_emails):
+    context = ""
+    for email in unread_emails:
+        context += f"Email ID: {email['message_id']}\n"
+        context += f"Thread ID: {email['thread_id']}\n"
+        context += f"From: {email['from']}\n"
+        context += f"Subject: {email['subject']}\n"
+        context += "\n"
+    context_variables = {
+        "user_emails_context": f"""Here is what you know about the user's email details: {context}
+    """}
+    return context_variables

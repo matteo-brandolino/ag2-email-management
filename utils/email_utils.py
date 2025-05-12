@@ -1,4 +1,4 @@
-from bs4 import BeautifulSoup  # Install with: pip install beautifulsoup4
+from bs4 import BeautifulSoup
 from googleapiclient.discovery import Resource
 import base64
 import os
@@ -9,6 +9,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from datetime import datetime
+import email.mime.text
+import email.mime.multipart
+import email.mime.application
+import mimetypes
 
 # several functions are adapted from https://github.com/Tylerbryy/zinbo/blob/main/src/gmail_service.py
 
@@ -326,3 +330,131 @@ def mark_email_as_read(gmail_service, message_id):
         return f"Email {message_id} marked as read."
     except Exception as e:
         return f"Failed to mark email as read: {e}"
+
+
+def create_draft(
+    gmail_service: Resource,
+    to: Union[str, List[str]],
+    subject: str,
+    body: str,
+    cc: Optional[Union[str, List[str]]] = None,
+    bcc: Optional[Union[str, List[str]]] = None,
+    attachment_paths: Optional[List[str]] = None,
+    thread_id: Optional[str] = None
+) -> Dict:
+    """
+    Creates a draft email in Gmail.
+
+    Args:
+        gmail_service (Resource): Gmail API service instance.
+        to (Union[str, List[str]]): Email address(es) of the recipient(s).
+        subject (str): Email subject.
+        body (str): Plain text body of the email.
+        cc (Optional[Union[str, List[str]]]): Email address(es) to CC.
+        bcc (Optional[Union[str, List[str]]]): Email address(es) to BCC.
+        attachment_paths (Optional[List[str]]): List of file paths to attach.
+        thread_id (Optional[str]): Thread ID to add this draft to (for replies).
+
+    Returns:
+        Dict: Response from the Gmail API containing the created draft information.
+    """
+    # Create a multipart message
+    message = email.mime.multipart.MIMEMultipart("alternative")
+
+    # Convert list addresses to strings if needed
+    if isinstance(to, list):
+        to = ", ".join(to)
+    if isinstance(cc, list) and cc:
+        cc = ", ".join(cc)
+    if isinstance(bcc, list) and bcc:
+        bcc = ", ".join(bcc)
+
+    # Add headers
+    message["To"] = to
+    message["Subject"] = subject
+    if cc:
+        message["Cc"] = cc
+    if bcc:
+        message["Bcc"] = bcc
+
+    # Attach plain text version
+    plain_part = email.mime.text.MIMEText(body, "plain")
+    message.attach(plain_part)
+
+    # Add attachments if provided
+    if attachment_paths:
+        for file_path in attachment_paths:
+            if not os.path.isfile(file_path):
+                print(f"Warning: Attachment {file_path} not found, skipping")
+                continue
+
+            # Guess the content type based on the file's extension
+            content_type, encoding = mimetypes.guess_type(file_path)
+            if content_type is None or encoding is not None:
+                content_type = 'application/octet-stream'  # Default type
+
+            main_type, sub_type = content_type.split('/', 1)
+
+            with open(file_path, 'rb') as file:
+                attachment = email.mime.application.MIMEApplication(
+                    file.read(),
+                    _subtype=sub_type
+                )
+
+            # Add header to attachment
+            filename = os.path.basename(file_path)
+            attachment.add_header('Content-Disposition',
+                                  'attachment', filename=filename)
+            message.attach(attachment)
+
+    # Encode the message
+    encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+    # Create the draft request body
+    draft_body = {
+        'message': {
+            'raw': encoded_message
+        }
+    }
+
+    # Add thread ID if provided (for replies)
+    if thread_id:
+        draft_body['message']['threadId'] = thread_id
+
+    try:
+        # Create the draft
+        draft = gmail_service.users().drafts().create(
+            userId="me",
+            body=draft_body
+        ).execute()
+
+        print(f"Draft created with ID: {draft['id']}")
+        return draft
+    except Exception as e:
+        print(f"An error occurred while creating the draft: {e}")
+        return {"error": str(e)}
+
+
+def send_draft(gmail_service: Resource, draft_id: str) -> Dict:
+    """
+    Sends an existing draft email in Gmail.
+
+    Args:
+        gmail_service (Resource): Gmail API service instance.
+        draft_id (str): The ID of the draft to send.
+
+    Returns:
+        Dict: Response from the Gmail API containing the sent message information.
+    """
+    try:
+        # Send the draft
+        sent_message = gmail_service.users().drafts().send(
+            userId="me",
+            body={"id": draft_id}
+        ).execute()
+
+        print(f"Draft with ID {draft_id} sent successfully.")
+        return sent_message
+    except Exception as e:
+        print(f"An error occurred while sending the draft: {e}")
+        return {"error": str(e)}
