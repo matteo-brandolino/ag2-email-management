@@ -272,8 +272,6 @@ def parse_email_data(
         print(f"Failed to parse email headers: {e}")
         return {}
 
-    print(f"Fetched email - Subject: {subject}, Sender: {sender}")
-
     # Extract the plain text body
     parts = msg["payload"].get("parts", [])
     body, attachments = extract_email_body_and_attachments(
@@ -317,7 +315,7 @@ def group_emails_by_sender(
             "from", "Unknown Sender"
         )  # Default to 'Unknown Sender' if missing
         grouped_emails[sender].append(email_data)
-    print(f"Grouped emails {dict(grouped_emails)}")
+    # print(f"Grouped emails {dict(grouped_emails)}")
     return dict(grouped_emails)
 
 
@@ -407,19 +405,48 @@ def create_draft(
                                   'attachment', filename=filename)
             message.attach(attachment)
 
-    # Encode the message
-    encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-
-    # Create the draft request body
-    draft_body = {
-        'message': {
-            'raw': encoded_message
-        }
-    }
-
-    # Add thread ID if provided (for replies)
     if thread_id:
-        draft_body['message']['threadId'] = thread_id
+        thread = gmail_service.users().threads().get(
+            userId="me", id=thread_id, format="full").execute()
+
+        last_msg = thread["messages"][-1]
+        reply_to_message_id = next(
+            (h["value"] for h in last_msg["payload"]
+             ["headers"] if h["name"] == "Message-ID"),
+            None)
+
+        # Costruisci References con tutti i Message-ID
+        references = []
+        for msg in thread["messages"]:
+            mid = next((h["value"] for h in msg["payload"]
+                       ["headers"] if h["name"] == "Message-ID"), None)
+            if mid:
+                references.append(mid)
+
+        if reply_to_message_id:
+            # Assicurati che siano racchiusi tra <>
+            if not reply_to_message_id.startswith('<'):
+                reply_to_message_id = f'<{reply_to_message_id}>'
+            message["In-Reply-To"] = reply_to_message_id
+
+        if references:
+            # Assicura formato corretto di ogni id (con <>)
+            refs_fixed = [f'<{ref.strip("<>")}>' if not ref.startswith(
+                '<') else ref for ref in references]
+            message["References"] = " ".join(refs_fixed)
+
+        draft_body = {
+            'message': {
+                'threadId': thread_id
+            }
+        }
+    else:
+        draft_body = {
+            'message': {}
+        }
+
+    encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    draft_body['message']['raw'] = encoded_message
 
     try:
         # Create the draft

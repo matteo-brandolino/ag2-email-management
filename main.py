@@ -1,4 +1,5 @@
 import random
+from typing import List, Union
 from utils.email_utils import (
     create_draft,
     fetch_email_thread,
@@ -72,7 +73,7 @@ def mark_all_from_sender_as_read(sender: str) -> str:
 
 
 def mark_one_email_as_read(email_id: str) -> str:
-    """ Marks a single email as read based on its id """
+    """ Marks a single email as read based on its id after user confirmation"""
     read_email_ids.append(email_id)
     if is_mock_read_email:
         return "Successfully marked email as read."
@@ -94,9 +95,22 @@ def get_full_thread(email_thread_id: str) -> str:
     return fetch_email_thread(gmail_service, email_thread_id)
 
 
-def write_draft(to: str, subject: str, body: str) -> str:
-    """ Create a draft """
-    return create_draft(gmail_service, to, subject, body)
+def write_draft(to: str, subject: str, body: str, cc: Union[str, List[str]] = None,
+                bcc: Union[str, List[str]] = None, attachment_paths: List[str] = None,
+                thread_id: str = None) -> str:
+    """ Create a draft email
+    Args:
+        to: Email address(es) of the recipient(s)
+        subject: Email subject
+        body: Plain text body of the email
+        cc: Email address(es) to CC
+        bcc: Email address(es) to BCC
+        attachment_paths: List of file paths to attach
+        thread_id: Thread ID to add this draft to (for replies)
+    Returns:
+        String with draft creation result
+    """
+    return create_draft(gmail_service, to, subject, body, cc, bcc, attachment_paths, thread_id)
 
 
 def send(draft_id: str) -> str:
@@ -121,13 +135,13 @@ triage_agent = ConversableAgent(
 All emails with id, sender and subject will be provided to you through context variables: {context_variables['user_emails_context']}.
 
 1. Classify ALL the emails into:
-- "Mark as read": If you think the email could be marked as read based on subject, from and body's email .
-- "Read full email to decide": If you need to read the full email to decide.
+- "Mark as read": If you think the email could be marked as read based on subject, from and body's email. Explain why the mail was classified like this.
+- "Read full email to decide": If you need to read the full email to decide. Explain why the mail was classified like this.
 
 2. After full emails are retrieved, outline the key points in short, concise sentences for each email. Make it short and informative.
 
 3. Please identify what sender's email are less important and can be marked as read in bulk.
-Given your suggestions on what emails by sender can be marked as read and ask the user for confirmation before marking them as read.
+Given your suggestions on what emails by sender can be marked as read and always ask the user for confirmation before marking them as read.
 
 4. Identify if any email requires a response and suggest this action.
 
@@ -139,42 +153,44 @@ If no further actions are needed, please reply with TERMINATE.
 writer_agent = ConversableAgent(
     name="writer_agent",
     llm_config=llm_config,
-    system_message=f"""You are a professional email draft writer assistant designed to help users craft precise, effective email communications.
+    system_message=f"""You are a professional email drafting assistant dedicated to helping users create precise, effective, and polished email communications.
+
 Your core responsibilities include:
 
-1. Draft Email Responses:
-- Carefully analyze the context and tone of incoming emails
-- Create draft responses that are clear and concise, professionally worded, aligned with the user's communication intent, appropriate to the email's context and sender
+1. Drafting Email Responses:
+- Thoroughly analyze the context and tone of incoming emails
+- Craft clear, concise, and professionally worded drafts
+- Align responses with the user’s communication intent, considering the email’s context and recipient
 
-
-2. Email Draft Workflow
+2. Email Drafting Workflow:
 a) Request specific guidance from the user about:
-- Desired tone (formal, friendly, direct)
-- Key points to include
-- Any specific instructions or nuances
-b) Provide multiple draft versions if the user wants options
-c) Allow for iterative refinement of email drafts
+   - Desired tone (e.g., formal, friendly, direct)
+   - Key points to include
+   - Any special instructions or nuances
+b) Offer multiple draft options if the user desires
+c) Support iterative refinement to perfect the drafts
 
-3. Email Draft Review
-- Proofread and suggest improvements to drafted emails
-- Check for: grammatical correctness, professional language,clarity of message, appropriate length and structure
+3. Reviewing Email Drafts:
+- Proofread and suggest improvements
+- Check for grammar, professionalism, clarity, length, and structure
 
+Special Considerations:
+- Be sensitive to varying communication contexts (business, personal, professional)
+- Adapt style to user preferences and recipient type
+- Maintain a neutral, helpful tone focused on achieving the user’s communication goals
 
-Special Considerations
+When drafting, always confirm with the user and be ready to revise until the email meets their exact needs.
+If the user wants to draft a reply, use the function to retrieve the full email thread through THREAD ID, and discuss the draft accordingly.
+To reply, use the THREAD ID to preserve email history.
+Always ask for the user’s intention before drafting a response.
+Please format all email drafts within triple backticks as plain text (```txt```).
+Use the send function only if the user confirms sending the reply.
 
-- Be sensitive to different communication contexts (business, personal, professional)
-- Adapt writing style based on user preferences and email recipient
-- Maintain a neutral, helpful tone while supporting the user's communication goals
-
-When drafting, always ask for user confirmation and be prepared to make multiple revisions to ensure the email meets the user's exact requirements
-If user want to draft a response to the email, call the function to get the full thread of the email and discuss with the user to draft a response. 
-You should ask the user's intention and draft a response accordingly. Please put the email in ```txt``` format.
-Call the function send if user wants to send a repy message.
-
-If no further actions are needed, please reply with TERMINATE.
+If no further actions are needed, respond with TERMINATE.
 """,
     functions=[get_full_thread, write_draft, send],
 )
+
 
 # Register hand-offs
 register_hand_off(

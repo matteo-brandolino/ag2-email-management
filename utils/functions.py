@@ -34,9 +34,8 @@ def fetch_all_emails(gmail_service, max_unread_emails_limit):
 
     while True:
         messages, page_token = fetch_emails(
-            gmail_service, page_token, filter_by=['UNREAD', 'INBOX']
+            gmail_service, page_token, filter_by=['UNREAD']
         )
-        print(f"messages {messages}")
         if not messages:
             break
 
@@ -48,7 +47,19 @@ def fetch_all_emails(gmail_service, max_unread_emails_limit):
                 break
         if not page_token or len(unread_emails) >= max_unread_emails_limit:
             break
-    print(f"Unread emails: {unread_emails}")
+    u_emails = {
+        ue["from"]: {
+            "message_id": ue["message_id"],
+            "thread_id": ue["thread_id"],
+            "subject": ue["subject"],
+            "body": ue["body"][:10]
+        }
+        for ue in unread_emails
+    }
+    for idx, (f, info) in enumerate(u_emails.items()):
+        print(
+            f"Unread email {idx + 1} from {f}: thread_id {info['thread_id']}, message_id {info['message_id']}, subject {info['subject']} body {info['body']}")
+
     return unread_emails
 
 
@@ -66,7 +77,7 @@ def sort_and_trim_emails(grouped_emails):
         stripped_sender = match.group(1) if match else sender
         sorted_grouped_emails[stripped_sender] = emails
 
-    print(f"Sorted_grouped_emails: {sorted_grouped_emails}")
+    # print(f"Sorted_grouped_emails: {sorted_grouped_emails}")
 
     return sorted_grouped_emails
 
