@@ -415,7 +415,6 @@ def create_draft(
              ["headers"] if h["name"] == "Message-ID"),
             None)
 
-        # Costruisci References con tutti i Message-ID
         references = []
         for msg in thread["messages"]:
             mid = next((h["value"] for h in msg["payload"]
@@ -424,13 +423,11 @@ def create_draft(
                 references.append(mid)
 
         if reply_to_message_id:
-            # Assicurati che siano racchiusi tra <>
             if not reply_to_message_id.startswith('<'):
                 reply_to_message_id = f'<{reply_to_message_id}>'
             message["In-Reply-To"] = reply_to_message_id
 
         if references:
-            # Assicura formato corretto di ogni id (con <>)
             refs_fixed = [f'<{ref.strip("<>")}>' if not ref.startswith(
                 '<') else ref for ref in references]
             message["References"] = " ".join(refs_fixed)
