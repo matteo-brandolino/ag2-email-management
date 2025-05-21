@@ -3,3 +3,4 @@ beautifulsoup4
 google-api-python-client
 google-auth-httplib2 
 ag2==0.9
+streamlit
